@@ -22,21 +22,20 @@ void printStats(int frames,int trace_count, counters counters_struct){
       printf("total trace examined from files: %d\n",trace_count);
 }
 
-int check_forPageNum(int ***inv_pageTable,int frames,int pageNum,char* type_rw, int proc_id){
-
+int check_forPageNum(int ***inv_pageTable,int frames,int pageNum,char type_rw, int proc_id){
   //find trace
   int trace_flag = 0; //init to 0
   for (int i = 0; i < frames; i++){
 
      // value not null
+     //printf("%d\n",inv_pageTable[i][5]);
      if (inv_pageTable[i][5] != 0)
      {
           if ((inv_pageTable[i][0] == proc_id) && (inv_pageTable[i][1] == pageNum)) {
 
-                  trace_flag = 1;
-
+                  if (inv_pageTable[i][2] == 1) trace_flag = 1; // dequeue case
                   //set type_bit
-                  if (strcmp(type_rw, "W") == 0){
+                  if (strcmp(&type_rw, "W") == 0){
                       inv_pageTable[i][4] = 1; //w
                   }
                   else{
@@ -72,23 +71,27 @@ int search_inv_pageTable(int frames,int pid,int pageNum, int modified, int ***in
                           }
                       }
         }
-        if (inv_pageTable[i][5] == 0){ //linear table,first empty entry
 
+        if (inv_pageTable[i][5] == 0){ //linear table,first empty entry
                       if (add == 1){
                            inv_pageTable[i][2] = 1; // valid
-                           inv_pageTable[i][1] = pageNum; // valid
-
+                           inv_pageTable[i][1] = pageNum;
+                           inv_pageTable[i][0] = pid;
+                           inv_pageTable[i][3] = modified;
+                           inv_pageTable[i][5] = 1;
                       }
 
         }
+
 
     }
 
 }
 
 void LRU_replacement(Queue *queue, Hash* hash, int pageNum, int pid,
-                      int frames, int modified, counters* pageFaults, int*** inv_pageTable){
-
+                      int frames, char type_rw, counters* pageFaults, int*** inv_pageTable){
+      int modified = 0;
+      if (type_rw = 'W') modified = 1;
       ReferencePage(queue,hash,pageNum,pid,modified,frames,pageFaults,inv_pageTable);
 
 }
@@ -103,19 +106,19 @@ void WS_replacement(Queue *queue, Hash* hash, int pageNum, int pid,
 
 int virtualMemory(int frames, int k, int q, int max, char* repl_arg){
 
-    int pageNum, pid, type_rw, max_flag;
+    int pageNum, pid, max_flag;
     int pageFaults = 0, in_memory = 0,
         reads_counter = 0, writes_counter = 0, trace_count = 0;
 
-    int ws_array[k][2]; // hold pageNum and time
+    /*int ws_array[k][2]; // hold pageNum and time
     for (int i = 0; i < k; i++){
         ws_array[i][0] = -1;
         ws_array[i][1] = -1;
-    }
+    }*/
 
     int **inv_pageTable;
 
-    char buff[bufferSize];
+    char buff[bufferSize], type_rw;
     char *file_val; //store arg1 or arg2 from file
     char pageNum_str[5];
 
@@ -137,6 +140,9 @@ int virtualMemory(int frames, int k, int q, int max, char* repl_arg){
         inv_pageTable[i][5] = 0; //5th-bit indicates null value(not in memory)
         inv_pageTable[i][2] = 0;  //use valid_bit to know if page is in memory,LRU
         inv_pageTable[i][3] = 0; //use modified_bit to know if you have to write it in backing store,init to 0
+      /*inv_pageTable[i][0] = -1;
+        inv_pageTable[i][1] = -1;
+        inv_pageTable[i][4] = 'R';*/
     }
 
 
@@ -161,7 +167,7 @@ int virtualMemory(int frames, int k, int q, int max, char* repl_arg){
       }
 
     Queue *queue = createQueue( frames );
-    //in order to use hash array for LRU's implementation ,the array must hold all addresses uo to 0xFFFF
+    //in order to use hash array for LRU's implementation ,the array must hold all addresses up to 0xFFFF
     //or i could make an adjacency list and hash page nums to avoid overflow because of large array
     Hash* hash;
     if (strcmp(repl_arg, "LRU") == 0) { hash = createHash( 65535 ); }
@@ -178,6 +184,7 @@ int virtualMemory(int frames, int k, int q, int max, char* repl_arg){
         fgets(buff, bufferSize, file);
 
         //read address
+
         file_val = strtok(buff, " ");
         strncpy(pageNum_str, file_val, 5);
         pageNum_str[4] = '\0';
@@ -185,12 +192,13 @@ int virtualMemory(int frames, int k, int q, int max, char* repl_arg){
 
 
         //read type
-        file_val = strtok(NULL, " ");
-        if (file_val == 'R'){  type_rw = 0;  }
-        else{  type_rw = 1;  }
+        file_val = strtok(NULL, "\r"); //represents enter key
+        //printf("%c\n",*file_val);
+        if (*file_val == 'R'){  type_rw = 'R';  }
+        else{  type_rw = 'W';  }
 
         //search ws_array to update time or insert page with current_time
-        int time = 0; int min;
+      /*  int time = 0; int min;
         for (int t=0; t<k; t++){
             if (t == 0){  min = i; }
             else if(ws_array[i][0] < min){ min = i; }
@@ -208,23 +216,21 @@ int virtualMemory(int frames, int k, int q, int max, char* repl_arg){
             if (t == k-1){//change min time of k
                   ws_array[i][k-1] = time++;
             }
-        }
+        }*/
 
-        if (check_forPageNum(inv_pageTable,
-                    frames, pageNum, type_rw, pid) == 0){
-
+          if (check_forPageNum(inv_pageTable,
+                   frames, pageNum, type_rw, pid) == 0) pageFaults_struct.pageFaults++;
                         //setting counters
                         pageFaults_struct.reads_counter++; //we read from file
                         //if type_bit is w,we will modify to 1 in
                         pageFaults_struct.proc1_pageFaults ++;
-                        pageFaults_struct.pageFaults ++;
+                        //pageFaults_struct.pageFaults ++; //not in invert table so it cant be in memory
 
 
                         //LRU:swap in,out means reads++ writes++
                         if (strcmp(repl_arg, "LRU") == 0) { LRU_replacement(queue,hash,pageNum,pid,frames,type_rw,&pageFaults_struct,inv_pageTable); }
                         //if (strcmp(repl_arg, "WS") == 0) { WS_replacement(queue,hash,pageNum,pid,frames,type_rw,&pageFaults_struct,inv_pageTable,ws_array,k); }
 
-        }
 
         //in this file we checked a trace
         trace_count ++;

@@ -149,9 +149,11 @@ void deQueue( Queue* queue, int frames, int modified, int *** inv_pageTable,coun
 
     //'delete' (set invalid) in invert table
     search_inv_pageTable(frames, temp->pid, temp->pageNumber, modified, inv_pageTable, pageFaults, 0);
+    //printf("153\n");
     free( temp );
 
     queue->count--;
+    //printf("156\n");
 }
 
 void Enqueue( Queue* queue, Hash* hash, int pageNumber, int pid,
@@ -162,7 +164,6 @@ void Enqueue( Queue* queue, Hash* hash, int pageNumber, int pid,
         //we swap out and in,so increment counters
         pageFaults->reads_counter++;
         pageFaults->writes_counter++;
-
 
         //set invert page table
         //we want to add and in deQueue 'delete'(set invalid) pid,pageNum
@@ -177,6 +178,7 @@ void Enqueue( Queue* queue, Hash* hash, int pageNumber, int pid,
 
         hash->array[ queue->rear->pageNumber ] = NULL;
         deQueue( queue , frames, modified, inv_pageTable ,pageFaults);
+        //printf("181\n");
     }
 
     QNode* temp = newQNode( pageNumber, pid );
@@ -192,13 +194,16 @@ void Enqueue( Queue* queue, Hash* hash, int pageNumber, int pid,
 
     hash->array[ pageNumber ] = temp;
 
+    // not in invert table so read from disk and write (swap out,swap in)
+    pageFaults->reads_counter++;
+    pageFaults->writes_counter++;
 
     queue->count++;
 }
 
 //reads writers counter may ++,inv table
 void ReferencePage( Queue* queue, Hash* hash, int pageNumber, int pid,
-                    int frames, int modified, counters *pageFaults, int*** inv_pageTable )
+                     int modified, int frames, counters *pageFaults, int*** inv_pageTable )
 {
     QNode* reqPage = hash->array[ pageNumber ];
     if ( reqPage == NULL ){
@@ -221,6 +226,7 @@ void ReferencePage( Queue* queue, Hash* hash, int pageNumber, int pid,
 
         queue->front = reqPage;
     }
+    //printf("230\n");
 }
 
 
